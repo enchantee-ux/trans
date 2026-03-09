@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>樂朗奇 Enchantée | 旗艦版運費計算系統</title>
+    <style>
+        :root { --brand-gold: #b58d59; --brand-dark: #2c3e50; --bg-light: #f9f7f5; }
+        body { font-family: "PingFang TC", "Microsoft JhengHei", sans-serif; background-color: var(--bg-light); padding: 20px; color: #333; line-height: 1.6; }
+        .container { max-width: 950px; margin: 0 auto; background: #fff; padding: 35px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); border-top: 8px solid var(--brand-gold); }
+        h1 { color: var(--brand-gold); text-align: center; margin-bottom: 30px; letter-spacing: 2px; }
+        .config-header { display: flex; gap: 20px; background: #eee; padding: 15px; border-radius: 8px; margin-bottom: 25px; }
+        .location-card { border: 1px solid #e0e0e0; padding: 25px; margin-bottom: 25px; border-radius: 12px; background: #fff; position: relative; transition: 0.3s; }
+        .location-card:hover { border-color: var(--brand-gold); box-shadow: 0 5px 15px rgba(181,141,89,0.1); }
+        .location-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; margin-bottom: 15px; padding-bottom: 10px; }
+        .box-row { display: flex; gap: 12px; margin-bottom: 12px; align-items: center; background: #fafafa; padding: 10px; border-radius: 6px; }
+        select, input { padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 14px; }
+        .btn { cursor: pointer; border: none; border-radius: 5px; padding: 10px 20px; font-weight: bold; transition: 0.2s; }
+        .btn-add-loc { background: var(--brand-gold); color: white; width: 100%; margin-bottom: 20px; font-size: 16px; }
+        .btn-add-box { background: #6c757d; color: white; font-size: 13px; margin-top: 5px; }
+        .btn-calc { background: #28a745; color: white; width: 100%; font-size: 22px; margin-top: 30px; box-shadow: 0 4px 10px rgba(40,167,69,0.3); }
+        .btn-remove { background: #e74c3c; color: white; padding: 5px 12px; }
+        .result-area { margin-top: 40px; padding: 25px; background: var(--brand-dark); color: #fff; border-radius: 12px; display: none; }
+        .summary-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        .summary-table th { border-bottom: 2px solid #555; padding: 10px; text-align: left; }
+        .summary-table td { padding: 12px 10px; border-bottom: 1px solid #444; }
+        .total-banner { text-align: right; color: #f1c40f; font-size: 28px; margin-top: 20px; border-top: 2px dashed #666; padding-top: 15px; }
+        .tag { padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .tag-mainland { background: #d4edda; color: #155724; }
+        .tag-island { background: #d1ecf1; color: #0c5460; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Enchantée 禮盒運費計算系統</h1>
+    
+    <div class="config-header">
+        <div style="flex:1">
+            <label><b>1. 設定免運地點總數：</b></label>
+            <input type="number" id="freeLimit" value="0" min="0" style="width: 80px;">
+            <small style="display:block; color:#666;">(系統將優先折抵運費最高的地點)</small>
+        </div>
+    </div>
+
+    <div id="locationList"></div>
+    
+    <button class="btn btn-add-loc" onclick="addLocation()">＋ 新增送貨地點</button>
+    <button class="btn btn-calc" onclick="calculate()">執行運費計算</button>
+
+    <div id="result" class="result-area"></div>
+</div>
+
+<script>
+    // 完整 15 款禮盒資料庫
+    const boxSpecs = [
+        { name: "法式菱格紋S–12入", max: 14 },
+        { name: "頂級湛藍S–12入", max: 14 },
+        { name: "頂級彤粉S–12入", max: 14 },
+        { name: "LOVE Pave–14入", max: 12 },
+        { name: "LOVE Romelle–14入", max: 12 },
+        { name: "LOVE Petal–14入", max: 12 },
+        { name: "法式餅乾盅–16入", max: 12 },
+        { name: "優雅星芒–雙層16入", max: 12 },
+        { name: "法式菱格紋M–16入", max: 12 },
+        { name: "頂級湛藍M–16入", max: 12 },
+        { name: "頂級彤粉M–16入", max: 12 },
+        { name: "頂級湛藍L–18入", max: 8 },
+        { name: "頂級彤粉L–18入", max: 8 },
+        { name: "頂級湛藍L–24入", max: 8 },
+        { name: "頂級彤粉L–24入", max: 8 }
+    ];
+
+    let locIdx = 0;
+
+    function addLocation() {
+        locIdx++;
+        const div = document.createElement('div');
+        div.className = 'location-card';
+        div.id = `loc_${locIdx}`;
+        div.innerHTML = `
+            <div class="location-header">
+                <strong style="font-size:18px; color:var(--brand-dark)">配送地點 #${locIdx}</strong>
+                <div>
+                    區域：<select class="region" style="font-weight:bold;"><option value="mainland">台灣本島</option><option value="island">離島地區</option></select>
+                    <button class="btn btn-remove" onclick="document.getElementById('loc_${locIdx}').remove()">移除此地點</button>
+                </div>
+            </div>
+            <div class="box-list"></div>
+            <button class="btn btn-add-box" onclick="addBoxRow(${locIdx})">＋ 搭配其他禮盒</button>
+        `;
+        document.getElementById('locationList').appendChild(div);
+        addBoxRow(locIdx); 
+    }
+
+    function addBoxRow(locationId) {
+        const boxList = document.querySelector(`#loc_${locationId} .box-list`);
+        const row = document.createElement('div');
+        row.className = 'box-row';
+        let options = boxSpecs.map((b, i) => `<option value="${i}">${b.name} (限${b.max}盒/箱)</option>`).join('');
+        row.innerHTML = `
+            <select class="box-type" style="flex:2">${options}</select>
+            數量：<input type="number" class="box-qty" value="1" min="1" style="width:70px; flex:0.5">
+            <button class="btn" style="background:#ddd; padding: 5px 10px;" onclick="this.parentElement.remove()">×</button>
+        `;
+        boxList.appendChild(row);
+    }
+
+    function calculate() {
+        const freeLimit = parseInt(document.getElementById('freeLimit').value) || 0;
+        const locations = document.querySelectorAll('.location-card');
+        let results = [];
+
+        locations.forEach((loc, index) => {
+            const region = loc.querySelector('.region').value;
+            const boxRows = loc.querySelectorAll('.box-row');
+            
+            let totalQty = 0;
+            let occupationSum = 0;
+            let itemNames = [];
+
+            boxRows.forEach(row => {
+                const spec = boxSpecs[row.querySelector('.box-type').value];
+                const qty = parseInt(row.querySelector('.box-qty').value) || 0;
+                if(qty > 0) {
+                    totalQty += qty;
+                    occupationSum += (qty / spec.max);
+                    itemNames.push(`${spec.name} x${qty}`);
+                }
+            });
+
+            if (totalQty === 0) return;
+
+            // 計算箱數：無條件進位
+            let cartons = Math.ceil(occupationSum);
+            let cost = 0;
+
+            if (region === 'mainland') {
+                // 本島邏輯：單寄一盒200，兩盒以上每箱250
+                cost = (totalQty === 1) ? 200 : (cartons * 250);
+            } else {
+                // 離島邏輯：單寄一盒280，兩盒以上每箱360
+                cost = (totalQty === 1) ? 280 : (cartons * 360);
+            }
+
+            results.push({ 
+                id: index + 1, 
+                region, 
+                totalQty, 
+                cartons, 
+                cost, 
+                items: itemNames.join(', ') 
+            });
+        });
+
+        // 商業邏輯：最貴的優先免運
+        results.sort((a, b) => b.cost - a.cost);
+
+        let finalTotal = 0;
+        let summaryHtml = `<h3>運費明細表</h3><table class="summary-table">
+            <tr><th>地點</th><th>配送區域</th><th>內容物</th><th>總盒數</th><th>預估箱數</th><th>運費</th><th>狀態</th></tr>`;
+
+        results.forEach((r, i) => {
+            let isFree = i < freeLimit;
+            let currentCost = isFree ? 0 : r.cost;
+            finalTotal += currentCost;
+
+            summaryHtml += `<tr>
+                <td>#${r.id}</td>
+                <td><span class="tag ${r.region==='mainland'?'tag-mainland':'tag-island'}">${r.region==='mainland'?'本島':'離島'}</span></td>
+                <td style="font-size:12px; max-width:200px;">${r.items}</td>
+                <td>${r.totalQty} 盒</td>
+                <td>${r.cartons} 箱</td>
+                <td>$${r.cost}</td>
+                <td style="color:${isFree?'#f1c40f':'#fff'}">${isFree?'★ 免運':'計費'}</td>
+            </tr>`;
+        });
+
+        summaryHtml += `</table><div class="total-banner">應付總運費：$${finalTotal.toLocaleString()}</div>`;
+        
+        const resDiv = document.getElementById('result');
+        resDiv.innerHTML = summaryHtml;
+        resDiv.style.display = 'block';
+        resDiv.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    // 初始化第一個地點
+    addLocation();
+</script>
+
+</body>
+</html>
